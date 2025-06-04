@@ -15,7 +15,6 @@ except ModuleNotFoundError as e:
 
 # GLOBAL VARIABLES
 stop_attack = threading.Event()
-enter_count = 0  # Track number of Enter presses during attack
 
 # DEF & CLASS
 def clear_text():
@@ -110,18 +109,13 @@ def countdown_timer(time_loader):
         remaining = int(time_loader - time.time())
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
+    command()  # Return to command prompt after attack completes
 
 def stop_attack_thread():
-    global enter_count
     input()
-    enter_count += 1
-    if enter_count == 1:
-        stop_attack.set()  # Stop attack on first Enter
-        print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
-    elif enter_count == 2:
-        print(f"\n{Fore.RED}Program terminated by user (Enter twice). Exiting...{Fore.RESET}")
-        stop_attack.set()
-        sys.exit(0)
+    stop_attack.set()  # Stop attack on Enter
+    print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
+    command()  # Return to command prompt
 
 def confirm_exit():
     while True:
@@ -135,7 +129,6 @@ def confirm_exit():
             print(f"{Fore.RED}Input tidak valid. Masukkan 'y' atau 'n'.{Fore.RESET}")
 
 def command():
-    global stop_attack, enter_count
     while True:
         try:
             data_input_loader = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
@@ -172,7 +165,6 @@ def command():
                         print(f"{Fore.YELLOW}FAILED TO GET URL . . .{Fore.RESET}")
                     if code_leak:
                         stop_attack.clear()  # Reset stop flag
-                        enter_count = 0  # Reset enter count
                         print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\n{Fore.RESET}")
                         # Start attack threads
                         for _ in range(create_thread):
