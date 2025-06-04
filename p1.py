@@ -117,14 +117,14 @@ def stop_attack_thread():
 
 def confirm_exit():
     while True:
-        choice = input(f"{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}").lower()
+        sys.stdout.write(f"\r{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}")
+        sys.stdout.flush()
+        choice = input().lower()
         if choice == 'y':
-            print(f"{Fore.RED}Program terminated by user (Enter). Exiting...{Fore.RESET}")
+            print(f"\n{Fore.RED}Program terminated by user (Enter). Exiting...{Fore.RESET}")
             sys.exit(0)
         elif choice == 'n':
             return
-        else:
-            print(f"{Fore.RED}Input tidak valid. Masukkan 'y' atau 'n'.{Fore.RESET}")
 
 def command():
     global stop_attack
