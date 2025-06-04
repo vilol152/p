@@ -117,19 +117,31 @@ def stop_attack_thread():
     enter_count += 1
     if enter_count == 1:
         stop_attack.set()  # Stop attack on first Enter
+        print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
     elif enter_count == 2:
         print(f"\n{Fore.RED}Program terminated by user (Enter twice). Exiting...{Fore.RESET}")
         stop_attack.set()
         sys.exit(0)
+
+def confirm_exit():
+    while True:
+        choice = input(f"{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}").lower()
+        if choice == 'y':
+            print(f"{Fore.RED}Program terminated by user (Enter). Exiting...{Fore.RESET}")
+            sys.exit(0)
+        elif choice == 'n':
+            return
+        else:
+            print(f"{Fore.RED}Input tidak valid. Masukkan 'y' atau 'n'.{Fore.RESET}")
 
 def command():
     global stop_attack, enter_count
     while True:
         try:
             data_input_loader = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
-            if not data_input_loader:  # Empty input (Enter) exits program
-                print(f"{Fore.RED}Program terminated by user (Enter). Exiting...{Fore.RESET}")
-                sys.exit(0)
+            if not data_input_loader:  # Empty input (Enter)
+                confirm_exit()
+                continue
             args_get = data_input_loader.split(" ")
             if args_get[0].lower() == "clear":
                 clear_text()
@@ -140,7 +152,7 @@ def command():
                     port_loader = int(args_get[3])
                     time_loader = time.time() + int(args_get[4])
                     spam_loader = int(args_get[5])
-                    create_thread = min(int(args_get[6]), 10)  # Limit threads to prevent RuntimeError
+                    create_thread = min(int(args_get[6]), 10)  # Limit threads
                     booter_sent = int(args_get[7])
                     methods_loader = args_get[8]
                     spam_create_thread = min(int(args_get[9]), 10)  # Limit threads
