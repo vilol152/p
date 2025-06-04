@@ -147,7 +147,6 @@ def command():
             if code_leak:
                 stop_attack.clear()  # Reset stop flag
                 clear_text()
-                print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\n{Fore.RESET}")
                 # Start attack threads
                 for _ in range(create_thread):
                     for _ in range(spam_create_thread):
