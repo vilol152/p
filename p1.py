@@ -109,6 +109,7 @@ def countdown_timer(time_loader):
         remaining = int(time_loader - time.time())
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
+        stop_attack.set()  # Stop attack when time is up
 
 def stop_attack_thread():
     input()
@@ -176,9 +177,8 @@ def command():
                         # Start stop attack thread
                         threading.Thread(target=stop_attack_thread).start()
                         # Wait for attack to finish or be stopped
-                        while not stop_attack.is_set() and time.time() < time_loader:
+                        while not stop_attack.is_set():
                             time.sleep(0.1)
-                        stop_attack.set()  # Ensure attack stops
                         print()  # Add newline for clean prompt
                         continue  # Return to COMMAND prompt
                 else:
