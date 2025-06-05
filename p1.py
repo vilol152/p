@@ -169,15 +169,11 @@ def command():
                         attack_thread = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet))
                         attack_thread.start()
                         # Start countdown timer
-                        timer_thread = threading.Thread(target=countdown_timer, args=(time_loader,))
-                        timer_thread.start()
+                        threading.Thread(target=countdown_timer, args=(time_loader,)).start()
                         # Start stop attack thread
-                        stop_thread = threading.Thread(target=stop_attack_thread)
-                        stop_thread.start()
+                        threading.Thread(target=stop_attack_thread).start()
                         # Wait for attack to finish or be stopped
-                        attack_thread.join()
-                        timer_thread.join()
-                        stop_thread.join()
+                        attack_thread.join()  # Wait for attack thread to complete
                         continue  # Return to COMMAND prompt
                 else:
                     print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
