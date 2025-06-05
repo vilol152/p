@@ -110,10 +110,15 @@ def countdown_timer(time_loader):
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
 
-def stop_attack_thread():
-    input()
-    stop_attack.set()  # Stop attack on Enter
-    print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
+def stop_attack_thread(time_loader):
+    while time.time() < time_loader and not stop_attack.is_set():
+        try:
+            input()  # Non-blocking input check
+            stop_attack.set()  # Stop attack on Enter
+            print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
+            break
+        except EOFError:
+            pass  # Ignore EOFError from input
 
 def confirm_exit():
     while True:
@@ -171,9 +176,10 @@ def command():
                         # Start countdown timer
                         threading.Thread(target=countdown_timer, args=(time_loader,)).start()
                         # Start stop attack thread
-                        threading.Thread(target=stop_attack_thread).start()
+                        threading.Thread(target=stop_attack_thread, args=(time_loader,)).start()
                         # Wait for attack to finish or be stopped
                         attack_thread.join()  # Wait for attack thread to complete
+                        stop_attack.set()  # Ensure attack stops
                         continue  # Return to COMMAND prompt
                 else:
                     print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
