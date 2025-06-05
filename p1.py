@@ -107,8 +107,6 @@ def countdown_timer(time_loader):
         sys.stdout.flush()
         time.sleep(1)
         remaining = int(time_loader - time.time())
-    if not stop_attack.is_set():
-        print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
 
 def stop_attack_thread():
     input()
